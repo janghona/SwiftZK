@@ -170,40 +170,55 @@ def panel_size(ax, sp, gas):
 
 
 def panel_x86_arm(ax, vx, va):
+    """Cross-ISA verification latency. Bars = x86 vs ARM per scheme with the
+    exact value; the recursion-vs-folding advantage ratio is drawn as a bracket
+    at each host so the "gap widens on ARM" claim is visible, not implied."""
     if vx is None or vx.empty or va is None or va.empty:
         return _ph(ax, "D. Verification: x86 vs ARM", "Exp 3")
     d = CMP_DEPTH
     x86 = vx[vx["depth"] == d].set_index("scheme")
     arm = va[va["depth"] == d].set_index("scheme")
-    schemes = [s for s in ["plonky2", "nova", "halo2", "supernova"] if s in arm.index]
+    schemes = [s for s in ["plonky2", "nova", "halo2", "supernova"]
+               if s in arm.index and s in x86.index]
     x = np.arange(len(schemes))
-    w = 0.38
-    lat_x86 = [x86.loc[s, "verify_time_ms_mean"] if s in x86.index else np.nan for s in schemes]
-    lat_arm = [arm.loc[s, "verify_time_ms_mean"] for s in schemes]
-    b1 = ax.bar(x - w / 2, lat_x86, w, label="latency x86", color="#9DB4C0")
-    b2 = ax.bar(x + w / 2, lat_arm, w, label="latency ARM (Neoverse-N2)", color="#5C6B73")
+    w = 0.36
+    lx = [x86.loc[s, "verify_time_ms_mean"] for s in schemes]
+    la = [arm.loc[s, "verify_time_ms_mean"] for s in schemes]
+    b1 = ax.bar(x - w / 2, lx, w, label="x86", color="#9DB4C0")
+    b2 = ax.bar(x + w / 2, la, w, label="ARM (Neoverse-N2)", color="#5C6B73")
     ax.set_yscale("log")
-    allv = [v for v in lat_x86 + lat_arm if not np.isnan(v)]
-    ax.set_ylim(min(allv) * 0.3, max(allv) * 8)
+    ax.set_ylim(min(lx + la) * 0.28, max(lx + la) * 30)
     ax.set_ylabel("verification latency (ms, log)")
+    for bars in (b1, b2):
+        for bb in bars:
+            v = bb.get_height()
+            ax.annotate(f"{v:.3g}", (bb.get_x() + bb.get_width() / 2, v),
+                        xytext=(0, 2), textcoords="offset points",
+                        ha="center", fontsize=7.5)
 
-    ax2 = ax.twinx()
-    mem_x86 = [x86.loc[s, "peak_mem_mib_mean"] if s in x86.index else np.nan for s in schemes]
-    mem_arm = [arm.loc[s, "peak_mem_mib_mean"] for s in schemes]
-    ax2.scatter(x - w / 2, mem_x86, marker="o", s=55, color="#1b4965",
-                ec="white", lw=0.8, zorder=6, label="peak RSS x86")
-    ax2.scatter(x + w / 2, mem_arm, marker="s", s=55, color="#e07a1f",
-                ec="white", lw=0.8, zorder=6, label="peak RSS ARM")
-    ax2.set_ylabel("peak RSS (MiB)")
-    ax2.set_ylim(0, max(v for v in mem_x86 + mem_arm if not np.isnan(v)) * 1.6)
+    # per-scheme x86 -> ARM change, just above each bar pair
+    for i in range(len(schemes)):
+        ch = (la[i] / lx[i] - 1) * 100
+        ax.annotate(f"{ch:+.0f}% on ARM", (i, max(lx[i], la[i]) * 1.5),
+                    ha="center", fontsize=7.5, color="#555")
+
+    # recursion-vs-folding advantage bracket at each host
+    if {"plonky2", "nova"}.issubset(schemes):
+        pi, ni = schemes.index("plonky2"), schemes.index("nova")
+        for off, host, pv, nv, col, h in [
+            (-w / 2, "x86", lx[pi], lx[ni], "#4C78A8", max(lx) * 3.0),
+            (+w / 2, "ARM", la[pi], la[ni], "#E45756", max(la) * 9.0),
+        ]:
+            xa, xb = pi + off, ni + off
+            ax.plot([xa, xa, xb, xb], [h * 0.82, h, h, h * 0.82], color=col, lw=1.2)
+            ax.text((xa + xb) / 2, h * 1.12, f"{nv / pv:.0f}×  {host}",
+                    ha="center", fontsize=8.5, fontweight="bold", color=col)
 
     ax.set_xticks(x)
-    ax.set_xticklabels(schemes, fontsize=9)
+    ax.set_xticklabels([f'{s}\n({x86.loc[s, "kind"]})' for s in schemes], fontsize=8.5)
     ax.set_title("D. Verification: x86 vs ARM", fontsize=10, loc="left")
     ax.grid(True, axis="y", which="both", alpha=0.25)
-    h1, l1 = ax.get_legend_handles_labels()
-    h2, l2 = ax2.get_legend_handles_labels()
-    ax.legend(h1 + h2, l1 + l2, fontsize=6.5, ncol=2, loc="upper left")
+    ax.legend(fontsize=8, loc="upper left", framealpha=0.9)
 
 
 def panel_dist(ax, runs):
