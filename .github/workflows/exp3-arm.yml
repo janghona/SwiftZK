@@ -1,0 +1,114 @@
+name: exp3-arm
+
+# Experiment 3 — mobile-class ARM verification, run on a GitHub-hosted ARM
+# runner (Ampere Altra, Neoverse-N1). No cloud account, no VM to provision.
+#
+# Measures wallet-side verification latency + peak memory for Plonky2 (recursion)
+# and Nova (folding) at aggregation depth 8 and 16, on a single pinned core.
+# Results are uploaded as an artifact; download it and drop the CSVs into
+# results/raw/, then run `python analysis/analyze.py --figures`.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'crates/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'rust-toolchain.toml'
+      - 'analysis/**'
+      - '.github/workflows/exp3-arm.yml'
+
+jobs:
+  exp3:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 90
+    env:
+      DEPTHS: "8,16"
+      VERIFY_RUNS: "200"
+      VERIFY_WARMUP: "20"
+      # proving here only produces the proof files; its timings are not used
+      PROVE_RUNS: "2"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Record ARM host (for the paper's reproducibility table)
+        run: |
+          {
+            echo "### Experiment 3 host"
+            echo '```'
+            uname -srm
+            echo "nproc: $(nproc)"
+            lscpu | sed -n '1,30p'
+            grep -E 'MemTotal|MemAvailable' /proc/meminfo
+            echo '```'
+          } | tee results_host_info.md
+        shell: bash
+
+      - name: Install pinned Rust toolchain
+        run: |
+          rustup toolchain install nightly-2026-09-02 --profile minimal
+          rustup override set nightly-2026-09-02
+          rustc --version && cargo --version
+        shell: bash
+
+      - name: Cache cargo + target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: exp3-arm-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}
+          restore-keys: exp3-arm-
+
+      - name: Build prover + verifier (plonky2 + nova)
+        run: cargo build --release -p zkbench-prover -p zkbench-verifier --features plonky2,nova
+        shell: bash
+
+      - name: Generate representative proofs (d = 8, 16)
+        run: |
+          mkdir -p proofs results/raw
+          ./target/release/zkbench-prover --scheme plonky2 --depths "$DEPTHS" \
+            --runs "$PROVE_RUNS" --warmup 1 --out-csv /tmp/prove_plonky2.csv --proof-dir proofs
+          ./target/release/zkbench-prover --scheme nova --depths "$DEPTHS" \
+            --runs "$PROVE_RUNS" --warmup 1 --out-csv /tmp/prove_nova.csv --proof-dir proofs
+        shell: bash
+
+      - name: Verify on ARM — single core, --host arm
+        run: |
+          taskset -c 0 ./target/release/zkbench-verifier \
+            --scheme plonky2 --host arm --depths "$DEPTHS" \
+            --runs "$VERIFY_RUNS" --warmup "$VERIFY_WARMUP" \
+            --out-csv results/raw/verify_arm_plonky2.csv --proof-dir proofs
+          taskset -c 0 ./target/release/zkbench-verifier \
+            --scheme nova --host arm --depths "$DEPTHS" \
+            --runs "$VERIFY_RUNS" --warmup "$VERIFY_WARMUP" \
+            --out-csv results/raw/verify_arm_nova.csv --proof-dir proofs
+        shell: bash
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Analyze + render
+        run: |
+          python -m pip install --quiet -r analysis/requirements.txt
+          python analysis/analyze.py --figures
+        shell: bash
+
+      - name: Upload Experiment 3 results
+        uses: actions/upload-artifact@v4
+        with:
+          name: exp3-arm-results
+          path: |
+            results/raw/verify_arm_plonky2.csv
+            results/raw/verify_arm_nova.csv
+            results/summary_verify.csv
+            results/exp3_table.md
+            results/dashboard.png
+            results/fig_exp3.png
+            results_host_info.md
+          if-no-files-found: error

@@ -1,0 +1,28 @@
+[package]
+name = "zkbench-core"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+serde.workspace = true
+csv.workspace = true
+peak_alloc.workspace = true
+
+# ZK backends — optional, one Cargo feature each.
+plonky2 = { version = "1.1", optional = true }
+nova-snark = { version = "0.75", optional = true }
+ff = { version = "0.13", optional = true }
+bincode = { version = "2", features = ["serde"], optional = true }
+
+[features]
+default = []
+# Each ZK backend is behind a feature flag so the workspace compiles before
+# any heavy cryptographic dependency is wired in. Enable one at a time.
+halo2 = []
+plonky2 = ["dep:plonky2"]
+nova = ["dep:nova-snark", "dep:ff", "dep:bincode"]
+supernova = []
+# Pipeline self-test only. NOT a ZK scheme. Never used for paper numbers.
+noop = []

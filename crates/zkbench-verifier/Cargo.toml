@@ -1,0 +1,24 @@
+[package]
+name = "zkbench-verifier"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "zkbench-verifier"
+path = "src/main.rs"
+
+[dependencies]
+zkbench-core = { path = "../zkbench-core" }
+anyhow.workspace = true
+clap.workspace = true
+csv.workspace = true
+peak_alloc.workspace = true
+
+[features]
+default = []
+halo2 = ["zkbench-core/halo2"]
+plonky2 = ["zkbench-core/plonky2"]
+nova = ["zkbench-core/nova"]
+supernova = ["zkbench-core/supernova"]
+noop = ["zkbench-core/noop"]

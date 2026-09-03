@@ -1,0 +1,5 @@
+scheme,depth,verification_gas,tx_exec_cost,note
+nova,8,202138,177248,Groth16-wrapped decider verify (exec) 202138; raw 9872B proof post = 21000+156248
+nova,16,202138,177344,raw 9872B proof post
+plonky2,8,202138,2049716,Groth16-wrapped decider verify (exec) 202138; raw 127208B proof post = 21000+2028716
+plonky2,16,202138,2050088,raw 127208B proof post

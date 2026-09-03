@@ -1,0 +1,7 @@
+# Plonky2 (plonky2_field) requires the nightly `specialization` feature, so the
+# whole workspace is pinned to a dated nightly for reproducibility. Record this
+# exact string in the paper's reproducibility block.
+[toolchain]
+channel = "nightly-2026-09-02"
+components = ["rustfmt", "clippy"]
+profile = "minimal"
