@@ -293,12 +293,13 @@ def panel_dist(ax, runs):
 
 
 def panel_ratio(ax, sp, vx, va, gas):
-    """Synthesis: folding-vs-recursion cost ratio per metric. Bar length = the
-    multiplier (log x); colour = which family is cheaper on that metric. On
-    every wallet-side metric recursion wins (10x–5,600x); folding wins only
-    bandwidth / on-chain, by ~12x."""
+    """Synthesis: both schemes on every metric, each metric normalised so its
+    cheaper scheme sits at 1x. Dumbbell — teal dot = plonky2 (recursion), red
+    dot = nova (folding), line = the gap; real value printed at each dot. On the
+    wallet-side metrics recursion is the 1x dot and folding is far to the right;
+    on proof size / on-chain post it flips."""
     if sp is None or sp.empty or vx is None or vx.empty:
-        return _ph(ax, "F. Cost ratio by metric", "Exp 1")
+        return _ph(ax, "F. Both schemes, per metric", "Exp 1")
 
     def piv(df, col, host=None, dep=None):
         d = df if host is None else df[df["host"] == host]
@@ -307,51 +308,65 @@ def panel_ratio(ax, sp, vx, va, gas):
         d = d.groupby("scheme")[col].first()
         return d.get("nova"), d.get("plonky2")
 
-    rows = []  # (label, ratio, winner)  winner in {"recursion","folding"}
+    def fmt(v, u):
+        if u == "gas":
+            return f"{v / 1e6:.2f} M gas" if v >= 1e6 else f"{v / 1e3:.0f} k gas"
+        if u == "KiB" and v >= 1024:
+            return f"{v / 1024:.1f} MiB"
+        return f"{v:,.0f} {u}" if v >= 100 else f"{v:.3g} {u}"
+
+    rows = []  # (label, nova_val, plonky2_val, unit)
     n, p = piv(vx, "verify_time_ms_mean", "x86", 16)
     if n and p:
-        rows.append(("verify time (x86)", n / p, "recursion"))
+        rows.append(("verify time · x86", n, p, "ms"))
     if va is not None and not va.empty:
         n, p = piv(va, "verify_time_ms_mean", "arm", 16)
         if n and p:
-            rows.append(("verify time (ARM)", n / p, "recursion"))
+            rows.append(("verify time · ARM", n, p, "ms"))
         n, p = piv(va, "peak_mem_mib_mean", "arm", 16)
         if n and p:
-            rows.append(("verify memory (ARM RSS)", n / p, "recursion"))
+            rows.append(("verify memory · ARM", n, p, "MiB"))
     one = sp.groupby("scheme").first()
     if {"nova", "plonky2"}.issubset(one.index):
-        rows.append(("verification key", one.loc["nova", "vk_size_kib_mean"]
-                     / one.loc["plonky2", "vk_size_kib_mean"], "recursion"))
-        rows.append(("aggregate proof", one.loc["plonky2", "proof_size_kib_mean"]
-                     / one.loc["nova", "proof_size_kib_mean"], "folding"))
+        rows.append(("verification key", one.loc["nova", "vk_size_kib_mean"],
+                     one.loc["plonky2", "vk_size_kib_mean"], "KiB"))
+        rows.append(("aggregate proof", one.loc["nova", "proof_size_kib_mean"],
+                     one.loc["plonky2", "proof_size_kib_mean"], "KiB"))
     if gas is not None and not gas.empty:
         g = gas.groupby("scheme")["tx_exec_cost"].first()
         if {"nova", "plonky2"}.issubset(g.index):
-            rows.append(("on-chain proof post", g["plonky2"] / g["nova"], "folding"))
+            rows.append(("on-chain proof post", g["nova"], g["plonky2"], "gas"))
     if not rows:
-        return _ph(ax, "F. Cost ratio by metric", "Exp 1")
+        return _ph(ax, "F. Both schemes, per metric", "Exp 1")
 
-    # wallet-side metrics first (recursion wins), then bandwidth/on-chain
-    rows.sort(key=lambda r: (r[2] != "recursion", -r[1]))
     y = np.arange(len(rows))[::-1]
-    xmax = max(r[1] for r in rows)
-    for yi, (lab, ratio, win) in zip(y, rows):
-        col = _c("plonky2") if win == "recursion" else _c("nova")
-        ax.barh(yi, ratio, height=0.6, color=col, alpha=0.85, zorder=2)
-        ax.text(1.4, yi, f"×{ratio:,.0f}  {win} cheaper", va="center",
-                ha="left", fontsize=8.5, fontweight="bold", color=col, zorder=4)
-    ax.axvline(1, color="#333", lw=1.2, zorder=3)
+    xmax = 1.0
+    for yi, (lab, nv, pv, u) in zip(y, rows):
+        base = min(nv, pv)
+        nr, pr = nv / base, pv / base
+        xmax = max(xmax, nr, pr)
+        ax.plot([nr, pr], [yi, yi], color="#ccc", lw=2.5, zorder=1)
+        ax.scatter([pr], [yi], s=80, color=_c("plonky2"), zorder=3, ec="white", lw=1)
+        ax.scatter([nr], [yi], s=80, color=_c("nova"), zorder=3, ec="white", lw=1)
+        lo_r, lo_c, lo_v = (pr, _c("plonky2"), pv) if pr <= nr else (nr, _c("nova"), nv)
+        hi_r, hi_c, hi_v = (nr, _c("nova"), nv) if pr <= nr else (pr, _c("plonky2"), pv)
+        ax.annotate(fmt(lo_v, u), (lo_r, yi), xytext=(-10, 0),
+                    textcoords="offset points", ha="right", va="center",
+                    fontsize=7.3, color=lo_c, fontweight="bold")
+        ax.annotate(f"{fmt(hi_v, u)}  ×{hi_r / lo_r:,.0f}", (hi_r, yi),
+                    xytext=(10, 0), textcoords="offset points", ha="left", va="center",
+                    fontsize=7.3, color=hi_c, fontweight="bold")
+    ax.axvline(1, color="#333", lw=1.2, zorder=2)
     ax.set_xscale("log")
-    ax.set_xlim(0.8, xmax * 3.5)
-    ax.set_ylim(-0.6, len(rows) - 0.4)
+    ax.set_xlim(0.06, xmax * 20)
+    ax.set_ylim(-0.6, len(rows) - 0.2)
     ax.set_yticks(y)
     ax.set_yticklabels([r[0] for r in rows], fontsize=8.5)
-    ax.set_xlabel("cost ratio (log)  ·  ← folding cheaper | recursion cheaper →")
-    n_wallet = sum(1 for r in rows if r[2] == "recursion")
-    if 0 < n_wallet < len(rows):
-        ax.axhline((y[n_wallet - 1] + y[n_wallet]) / 2, color="#999",
-                   lw=1.1, ls="--", zorder=1)
-    ax.set_title("F. Cost ratio by metric", fontsize=12.5, fontweight="bold",
+    ax.set_xlabel("relative cost  (cheaper scheme = 1×,  log)")
+    ax.scatter([], [], s=80, color=_c("plonky2"), label="plonky2 (recursion)")
+    ax.scatter([], [], s=80, color=_c("nova"), label="nova (folding)")
+    ax.legend(fontsize=7.5, loc="lower right", framealpha=0.95)
+    ax.set_title("F. Both schemes, per metric", fontsize=12.5, fontweight="bold",
                  loc="left", pad=8)
     ax.grid(True, axis="x", which="both", alpha=0.25)
 
