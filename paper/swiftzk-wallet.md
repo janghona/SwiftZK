@@ -475,21 +475,28 @@ in §6.2.
 
 ### 6.4 Experiment 3 — Results
 
-**Table 3.** ARM mobile-class verification, Plonky2 vs Nova
-(`results/exp3_table.md`). _Pending the `exp3-arm` GitHub Actions run._
+**Table 3.** ARM mobile-class verification, Plonky2 vs Nova — GitHub-hosted
+`ubuntu-24.04-arm` (Neoverse-N1), one pinned core, 20 warmup + 200 measured runs,
+mean ± 95% CI (`results/exp3_table.md`).
 
-| Scheme | Kind | Depth | Verify Latency (ms) | Peak Mem (MiB) |
+| Scheme | Kind | Depth | Verify Latency (ms) | Peak RSS (MiB) |
 |---|---|---:|---:|---:|
-| plonky2 | recursive | 8 | — | — |
-| plonky2 | recursive | 16 | — | — |
-| nova | folding | 8 | — | — |
-| nova | folding | 16 | — | — |
+| plonky2 | recursive | 8 | 4.579 ± 0.002 | 3.2 |
+| plonky2 | recursive | 16 | 4.576 ± 0.001 | 3.2 |
+| nova | folding | 8 | 262.15 ± 0.12 | 31.9 |
+| nova | folding | 16 | 259.22 ± 0.13 | 34.2 |
 
-We expect this to confirm the Experiment 1 ordering on ARM: published
-ARM-vs-x86 SNARK-verification ratios are ≈2–4× in latency, which keeps the
-recursive verifier well under 20 ms while the folding decider approaches a few
-hundred ms; memory and key size are ISA-independent, so the 0.47 MiB vs 39 MiB
-and 1.85 KiB vs 10.2 MiB gaps carry over directly.
+**Observations.** The Experiment 1 ordering holds on ARM and in fact widens.
+Plonky2's FRI verification is essentially ISA-insensitive here — 4.58 ms on
+Neoverse-N1 versus 4.85 ms on the x86 host — while Nova's decider (MSM-heavy
+Spartan/IPA) slows to ≈260 ms, ≈1.6× its x86 figure. Recursive verification is
+thus **≈57× faster** on ARM (4.58 ms vs 260 ms) and uses **≈10×** less process
+memory (3.2 MiB vs 32–34 MiB); both are flat in aggregation depth. (The ARM
+memory figures are process peak RSS, `VmHWM`; the 0.47 MiB x86 Plonky2 figure in
+Table 1a is a tracking-allocator heap peak on Windows — a different, lower basis.
+The ARM RSS numbers are the like-for-like pair.) A 4.6 ms / 3 MiB verification
+sits far inside any mobile budget; a 260 ms / 34 MiB one, plus a 10 MiB key, does
+not.
 
 ### 6.5 Selection
 
@@ -509,11 +516,13 @@ verification-time, memory, and key-size costs. Experiment 2 does not overturn
 this: once wrapped to Groth16 both families verify on-chain at ≈202 k gas, and
 the wallet in our architecture verifies locally and submits only a small
 attestation, so the 11.6× calldata penalty of Plonky2's raw proof (§6.3) is not
-on the wallet's critical path. The recommendation is therefore **recursive
-aggregation (Plonky2)** for wallet-side verification; folding is preferable when
-the raw aggregate proof is posted on-chain, or when uplink bandwidth or prover
-scalability dominates. This conclusion is scoped to wallet-side verification and
-to this workload; it is not a claim of general superiority. Halo2 and SuperNova would change which concrete
+on the wallet's critical path. Experiment 3 confirms it on ARM, where the gap
+*widens* to ≈57× in latency and ≈10× in memory. The recommendation is therefore
+**recursive aggregation (Plonky2)** for wallet-side verification; folding is
+preferable when the raw aggregate proof is posted on-chain, or when uplink
+bandwidth or prover scalability dominates. This conclusion is scoped to
+wallet-side verification and to this workload; it is not a claim of general
+superiority. Halo2 and SuperNova would change which concrete
 scheme represents each family, not the family-level ordering: both share their
 family's verifier structure (one succinct final check for recursion; a decider
 check plus a commitment-key–sized verification key for folding).
@@ -522,9 +531,10 @@ check plus a commitment-key–sized verification key for folding).
 Rust `nightly-2026-09-02`. Crates: `plonky2` 1.1, `nova-snark` 0.75,
 `peak_alloc` 0.2. Release profile `opt-level=3, lto=true, codegen-units=1`.
 Foundry `forge 1.8.1`, `solc 0.8.24`. Experiment 3: GitHub-hosted
-`ubuntu-24.04-arm` runner (Ampere Altra / Neoverse-N1; exact `lscpu` recorded by
-the workflow). Artefacts: `results/summary_*.csv`, `results/raw/*.csv`,
-`proofs/*.{bin,vk}`; the `exp3-arm` workflow is the executable Exp 3 protocol.
+`ubuntu-24.04-arm` runner (Ampere Altra, Neoverse-N1, ~3.0 GHz; exact `lscpu` in
+the workflow run log / `results_host_info.md`), verifier pinned to one core.
+Artefacts: `results/summary_*.csv`, `results/raw/*.csv`, `proofs/*.{bin,vk}`; the
+`exp3-arm` workflow is the executable Experiment 3 protocol.
 
 **Limitations.** Single workload family. Each ZK family is instantiated with one
 implementation (Plonky2, Nova); Halo2 and SuperNova are discussed but not
@@ -543,10 +553,11 @@ We framed ZK proof aggregation from the mobile wallet's point of view — the
 party that verifies — and compared recursion (Plonky2) against folding (Nova)
 under one identical workload, an aggregation-depth sweep 2–64, and repeated-run
 statistics, then carried the result to an EVM verifier and an ARM mobile-class
-environment. On the wallet's own cost — verification time, verifier memory, and
-verification-key size — recursion dominates by one to three orders of magnitude
-and is flat in aggregation depth; folding's smaller proof does not offset this
-for a client that only verifies. The deliverable is a systematic comparison and
+runner. On the wallet's own cost — verification time, verifier memory, and
+verification-key size — recursion dominates by one to three orders of magnitude,
+is flat in aggregation depth, and the margin only grows on ARM (≈57× in
+latency); folding's smaller proof does not offset this for a client that only
+verifies. The deliverable is a systematic comparison and
 a selection rule based on measured verification time, memory, and proof size,
 plus a blockchain-connected verification path. We make no claim to a new
 protocol or to universal superiority; the scope is lightweight wallet-side
