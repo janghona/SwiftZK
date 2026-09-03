@@ -13,7 +13,7 @@ Six consolidated panels, driven entirely by the experiment CSVs:
     C  artifact size        aggregate proof & verification key (+ on-chain post cost)
     D  x86 vs ARM           verification latency and peak RSS side by side
     E  per-run spread    per-run deviation from median at one depth (dev vs CI noise)
-    F  stability          verification-time CV, clean series only (dev + CI), depth>=4
+    F  stability          verification-time CV vs depth (x86 dev + ARM CI), depth>=4
 
 Each panel degrades to an "awaiting data" placeholder. No numbers are invented.
 Usage:  python analysis/dashboard.py            # -> results/dashboard.png
@@ -294,31 +294,32 @@ def panel_dist(ax, runs):
 
 
 def panel_cv(ax, sp, vx, va):
-    """Stability of the metric the conclusions rest on: verification-time CV
-    vs depth. Only the clean series are drawn — x86 dev machine (~2-5%) and the
-    ARM CI runner (<0.2%), depth >= 4. The d=2 cold-start and the noisy
-    proving-time CV (dev-machine contention) are excluded and noted."""
+    """Stability of the metric the paper's selection rests on — verification-time
+    CV vs depth: x86 dev machine (~2-5%) and the ARM CI runner (<0.2%), depth
+    >= 4 (d=2 is a cold-start warmup). Proving-time CV is not shown: it is
+    dominated by dev-machine thermal/scheduling effects, not a scheme property;
+    proving means (panel A) follow the monotone trend regardless."""
     if vx is None or vx.empty:
         return _ph(ax, "F. Verification-timing stability", "Exp 1")
     for s, g in vx.groupby("scheme"):
         g = g[g["depth"] >= 4].sort_values("depth")
         ax.plot(g["depth"], g["verify_time_ms_cv"] * 100, color=_c(s), ls=":",
-                marker="v", ms=6, lw=1.6, label=f"{s} — x86 (dev)")
+                marker="v", ms=6, lw=1.6, label=f"{s} — x86 dev")
     if va is not None and not va.empty:
         for s, g in va.groupby("scheme"):
             g = g[g["depth"] >= 4].sort_values("depth")
             ax.scatter(g["depth"], g["verify_time_ms_cv"] * 100, color=_c(s),
-                       marker="*", s=190, ec="black", lw=0.6, zorder=6,
-                       label=f"{s} — ARM (CI)")
+                       marker="*", s=200, ec="black", lw=0.6, zorder=6,
+                       label=f"{s} — ARM CI")
     _depthx(ax)
     ax.set_yscale("log")
     ax.set_ylim(0.03, 20)
     ax.set_ylabel("verification-time CV (%, log)")
     ax.axhline(1, color="#999", lw=0.8, ls="--")
     ax.text(4.1, 1.13, "1%", color="#999", fontsize=7.5, va="bottom")
-    ax.text(0.5, 0.03, "d=2 (cold-start warmup) and proving-time CV "
-            "(dev-machine contention) excluded", transform=ax.transAxes,
-            ha="center", va="bottom", fontsize=6.8, color="#888")
+    ax.text(0.5, 0.03, "d=2 (cold-start) and proving-time CV "
+            "(dev-machine thermal) not shown", transform=ax.transAxes,
+            ha="center", va="bottom", fontsize=6.8, color="#999")
     ax.legend(fontsize=7, ncol=2, loc="upper center", framealpha=0.9)
     ax.set_title("F. Verification-timing stability", fontsize=12.5,
                  fontweight="bold", loc="left", pad=8)
