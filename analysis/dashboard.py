@@ -13,7 +13,7 @@ Six consolidated panels, driven entirely by the experiment CSVs:
     C  artifact size        aggregate proof & verification key (+ on-chain post cost)
     D  x86 vs ARM           verification latency and peak RSS side by side
     E  per-run spread    per-run deviation from median at one depth (dev vs CI noise)
-    F  stability          verification-time CV vs depth (x86 dev + ARM CI), depth>=4
+    F  stability          CV vs depth: proving + verification, both hosts (original)
 
 Each panel degrades to an "awaiting data" placeholder. No numbers are invented.
 Usage:  python analysis/dashboard.py            # -> results/dashboard.png
@@ -294,34 +294,39 @@ def panel_dist(ax, runs):
 
 
 def panel_cv(ax, sp, vx, va):
-    """Stability of the metric the paper's selection rests on — verification-time
-    CV vs depth: x86 dev machine (~2-5%) and the ARM CI runner (<0.2%), depth
-    >= 4 (d=2 is a cold-start warmup). Proving-time CV is not shown: it is
-    dominated by dev-machine thermal/scheduling effects, not a scheme property;
-    proving means (panel A) follow the monotone trend regardless."""
-    if vx is None or vx.empty:
-        return _ph(ax, "F. Verification-timing stability", "Exp 1")
-    for s, g in vx.groupby("scheme"):
-        g = g[g["depth"] >= 4].sort_values("depth")
-        ax.plot(g["depth"], g["verify_time_ms_cv"] * 100, color=_c(s), ls=":",
-                marker="v", ms=6, lw=1.6, label=f"{s} — x86 dev")
+    """Measurement stability — coefficient of variation of the timing runs vs
+    depth. Proving-time CV (solid) and verification-time CV on x86 (dotted) and
+    on the ARM CI runner (stars). Two labelled artifacts: nova d=2 verify
+    (cold-start warmup) and plonky2 d=32 proving (host noise); everything else
+    is under 10%."""
+    if sp is None or sp.empty:
+        return _ph(ax, "F. Measurement stability (CV)", "Exp 1")
+    for s, g in sp.groupby("scheme"):
+        g = g.sort_values("depth")
+        ax.plot(g["depth"], g["proving_time_ms_cv"] * 100, color=_c(s), ls="-",
+                marker="o", ms=4, label=f"{s} — prove time")
+    if vx is not None and not vx.empty:
+        for s, g in vx.groupby("scheme"):
+            g = g.sort_values("depth")
+            ax.plot(g["depth"], g["verify_time_ms_cv"] * 100, color=_c(s), ls=":",
+                    marker="v", ms=4, label=f"{s} — verify time (x86)")
     if va is not None and not va.empty:
         for s, g in va.groupby("scheme"):
-            g = g[g["depth"] >= 4].sort_values("depth")
+            g = g.sort_values("depth")
             ax.scatter(g["depth"], g["verify_time_ms_cv"] * 100, color=_c(s),
-                       marker="*", s=200, ec="black", lw=0.6, zorder=6,
-                       label=f"{s} — ARM CI")
+                       marker="*", s=130, ec="black", lw=0.6, zorder=6,
+                       label=f"{s} — verify (ARM)")
+    ax.axhline(10, color="#c00", lw=0.8, ls="--", alpha=0.6)
+    ax.text(2, 10.5, "10%", color="#c00", fontsize=7, va="bottom")
+    ax.annotate("nova d=2: cold-start warmup artifact", xy=(4.2, 55),
+                fontsize=6.5, color="#888", ha="left", va="center")
+    ax.annotate("plonky2 prove d=32:\nhost noise", xy=(20, 18), xytext=(9, 30),
+                fontsize=6.5, color="#888",
+                arrowprops=dict(arrowstyle="->", color="#aaa", lw=0.7))
     _depthx(ax)
-    ax.set_yscale("log")
-    ax.set_ylim(0.03, 20)
-    ax.set_ylabel("verification-time CV (%, log)")
-    ax.axhline(1, color="#999", lw=0.8, ls="--")
-    ax.text(4.1, 1.13, "1%", color="#999", fontsize=7.5, va="bottom")
-    ax.text(0.5, 0.03, "d=2 (cold-start) and proving-time CV "
-            "(dev-machine thermal) not shown", transform=ax.transAxes,
-            ha="center", va="bottom", fontsize=6.8, color="#999")
-    ax.legend(fontsize=7, ncol=2, loc="upper center", framealpha=0.9)
-    ax.set_title("F. Verification-timing stability", fontsize=12.5,
+    ax.set_ylabel("coefficient of variation (%)")
+    ax.legend(fontsize=6.5, ncol=2)
+    ax.set_title("F. Measurement stability (CV)", fontsize=12.5,
                  fontweight="bold", loc="left", pad=8)
 
 
