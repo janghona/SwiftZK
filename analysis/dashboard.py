@@ -75,7 +75,7 @@ def _ph(ax, title: str, what: str) -> None:
     ax.set_xticks([]); ax.set_yticks([])
     for s in ax.spines.values():
         s.set_visible(False)
-    ax.set_title(title, fontsize=10, loc="left")
+    ax.set_title(title, fontsize=12.5, fontweight="bold", loc="left", pad=8)
 
 
 def _depthx(ax):
@@ -106,7 +106,7 @@ def panel_time(ax, sp, vx, va):
     _depthx(ax)
     ax.set_yscale("log")
     ax.set_ylabel("time (ms, log)")
-    ax.set_title("A. Time vs depth", fontsize=10, loc="left")
+    ax.set_title("A. Time vs depth", fontsize=12.5, fontweight="bold", loc="left", pad=8)
     ax.legend(fontsize=6.5, ncol=2)
 
 
@@ -131,7 +131,7 @@ def panel_mem(ax, sp, vx, va):
     _depthx(ax)
     ax.set_yscale("log")
     ax.set_ylabel("peak memory (MiB, log)")
-    ax.set_title("B. Peak memory vs depth", fontsize=10, loc="left")
+    ax.set_title("B. Peak memory vs depth", fontsize=12.5, fontweight="bold", loc="left", pad=8)
     ax.legend(fontsize=6.5, ncol=2)
 
 
@@ -164,7 +164,7 @@ def panel_size(ax, sp, gas):
         labels.append(f"{s}\n({k})\npost {post}")
     ax.set_xticks(x)
     ax.set_xticklabels(labels, fontsize=7.5)
-    ax.set_title("C. Proof & verification-key size", fontsize=10, loc="left")
+    ax.set_title("C. Proof & verification-key size", fontsize=12.5, fontweight="bold", loc="left", pad=8)
     ax.grid(True, axis="y", which="both", alpha=0.25)
     ax.legend(fontsize=8)
 
@@ -216,7 +216,7 @@ def panel_x86_arm(ax, vx, va):
 
     ax.set_xticks(x)
     ax.set_xticklabels([f'{s}\n({x86.loc[s, "kind"]})' for s in schemes], fontsize=8.5)
-    ax.set_title("D. Verification: x86 vs ARM", fontsize=10, loc="left")
+    ax.set_title("D. Verification: x86 vs ARM", fontsize=12.5, fontweight="bold", loc="left", pad=8)
     ax.grid(True, axis="y", which="both", alpha=0.25)
     ax.legend(fontsize=8, loc="upper left", framealpha=0.9)
 
@@ -255,7 +255,7 @@ def panel_dist(ax, runs):
     ax.set_xticks(pos)
     ax.set_xticklabels(labels, fontsize=7.5)
     ax.set_ylabel("per-run deviation from median (%)")
-    ax.set_title("E. Per-run verification spread", fontsize=10, loc="left")
+    ax.set_title("E. Per-run verification spread", fontsize=12.5, fontweight="bold", loc="left", pad=8)
     ax.grid(True, axis="y", alpha=0.25)
 
 
@@ -286,7 +286,7 @@ def panel_cv(ax, sp, vx, va):
                 arrowprops=dict(arrowstyle="->", color="#aaa", lw=0.7))
     _depthx(ax)
     ax.set_ylabel("coefficient of variation (%)")
-    ax.set_title("F. Timing stability (CV)", fontsize=10, loc="left")
+    ax.set_title("F. Timing stability (CV)", fontsize=12.5, fontweight="bold", loc="left", pad=8)
     ax.legend(fontsize=6.5, ncol=2, loc="upper right")
 
 
