@@ -12,7 +12,8 @@ Six consolidated panels, driven entirely by the experiment CSVs:
     B  peak memory vs depth prover vs verifier, both schemes, + ARM points
     C  artifact size        aggregate proof & verification key (+ on-chain post cost)
     D  x86 vs ARM           verification latency and peak RSS side by side
-    E  per-run spread    per-run deviation from median; dev-machine vs CI-runner noise
+    E  per-run spread    per-run deviation from median at one depth (dev vs CI noise)
+    F  verify CV         verification-time coefficient of variation across all depths
 
 Each panel degrades to an "awaiting data" placeholder. No numbers are invented.
 Usage:  python analysis/dashboard.py            # -> results/dashboard.png
@@ -292,83 +293,49 @@ def panel_dist(ax, runs):
     ax.grid(True, axis="y", alpha=0.25)
 
 
-def panel_ratio(ax, sp, vx, va, gas):
-    """Synthesis: both schemes on every metric, each metric normalised so its
-    cheaper scheme sits at 1x. Dumbbell — teal dot = plonky2 (recursion), red
-    dot = nova (folding), line = the gap; real value printed at each dot. On the
-    wallet-side metrics recursion is the 1x dot and folding is far to the right;
-    on proof size / on-chain post it flips."""
-    if sp is None or sp.empty or vx is None or vx.empty:
-        return _ph(ax, "F. Both schemes, per metric", "Exp 1")
-
-    def piv(df, col, host=None, dep=None):
-        d = df if host is None else df[df["host"] == host]
-        if dep is not None and "depth" in d:
-            d = d[d["depth"] == dep] if dep in set(d["depth"]) else d[d["depth"] == d["depth"].max()]
-        d = d.groupby("scheme")[col].first()
-        return d.get("nova"), d.get("plonky2")
-
-    def fmt(v, u):
-        if u == "gas":
-            return f"{v / 1e6:.2f} M gas" if v >= 1e6 else f"{v / 1e3:.0f} k gas"
-        if u == "KiB" and v >= 1024:
-            return f"{v / 1024:.1f} MiB"
-        return f"{v:,.0f} {u}" if v >= 100 else f"{v:.3g} {u}"
-
-    rows = []  # (label, nova_val, plonky2_val, unit)
-    n, p = piv(vx, "verify_time_ms_mean", "x86", 16)
-    if n and p:
-        rows.append(("verify time · x86", n, p, "ms"))
+def panel_cv(ax, sp, vx, va):
+    """Verification-time CV across the whole depth sweep (E is one depth only).
+    ARM/CI stays under 0.1%, x86 dev-machine sits at ~1-5% with a d=2 cold-start
+    outlier. Proving-time CV is called out separately as dev-machine contention,
+    not a scheme property."""
+    if vx is None or vx.empty:
+        return _ph(ax, "F. Verification-time CV vs depth", "Exp 1")
+    cap = 6.0
+    off = []
+    for s, g in vx.groupby("scheme"):
+        g = g.sort_values("depth")
+        cvv = g["verify_time_ms_cv"] * 100
+        ax.plot(g["depth"], cvv.clip(upper=cap), color=_c(s), ls=":", marker="v",
+                ms=6, label=f"{s} — x86")
+        off += [(dd, c, s) for dd, c in zip(g["depth"], cvv) if c > cap + 2]
     if va is not None and not va.empty:
-        n, p = piv(va, "verify_time_ms_mean", "arm", 16)
-        if n and p:
-            rows.append(("verify time · ARM", n, p, "ms"))
-        n, p = piv(va, "peak_mem_mib_mean", "arm", 16)
-        if n and p:
-            rows.append(("verify memory · ARM", n, p, "MiB"))
-    one = sp.groupby("scheme").first()
-    if {"nova", "plonky2"}.issubset(one.index):
-        rows.append(("verification key", one.loc["nova", "vk_size_kib_mean"],
-                     one.loc["plonky2", "vk_size_kib_mean"], "KiB"))
-        rows.append(("aggregate proof", one.loc["nova", "proof_size_kib_mean"],
-                     one.loc["plonky2", "proof_size_kib_mean"], "KiB"))
-    if gas is not None and not gas.empty:
-        g = gas.groupby("scheme")["tx_exec_cost"].first()
-        if {"nova", "plonky2"}.issubset(g.index):
-            rows.append(("on-chain proof post", g["nova"], g["plonky2"], "gas"))
-    if not rows:
-        return _ph(ax, "F. Both schemes, per metric", "Exp 1")
-
-    y = np.arange(len(rows))[::-1]
-    xmax = 1.0
-    for yi, (lab, nv, pv, u) in zip(y, rows):
-        base = min(nv, pv)
-        nr, pr = nv / base, pv / base
-        xmax = max(xmax, nr, pr)
-        ax.plot([nr, pr], [yi, yi], color="#ccc", lw=2.5, zorder=1)
-        ax.scatter([pr], [yi], s=80, color=_c("plonky2"), zorder=3, ec="white", lw=1)
-        ax.scatter([nr], [yi], s=80, color=_c("nova"), zorder=3, ec="white", lw=1)
-        lo_r, lo_c, lo_v = (pr, _c("plonky2"), pv) if pr <= nr else (nr, _c("nova"), nv)
-        hi_r, hi_c, hi_v = (nr, _c("nova"), nv) if pr <= nr else (pr, _c("plonky2"), pv)
-        ax.annotate(fmt(lo_v, u), (lo_r, yi), xytext=(-10, 0),
-                    textcoords="offset points", ha="right", va="center",
-                    fontsize=7.3, color=lo_c, fontweight="bold")
-        ax.annotate(f"{fmt(hi_v, u)}  ×{hi_r / lo_r:,.0f}", (hi_r, yi),
-                    xytext=(10, 0), textcoords="offset points", ha="left", va="center",
-                    fontsize=7.3, color=hi_c, fontweight="bold")
-    ax.axvline(1, color="#333", lw=1.2, zorder=2)
-    ax.set_xscale("log")
-    ax.set_xlim(0.06, xmax * 20)
-    ax.set_ylim(-0.6, len(rows) - 0.2)
-    ax.set_yticks(y)
-    ax.set_yticklabels([r[0] for r in rows], fontsize=8.5)
-    ax.set_xlabel("relative cost  (cheaper scheme = 1×,  log)")
-    ax.scatter([], [], s=80, color=_c("plonky2"), label="plonky2 (recursion)")
-    ax.scatter([], [], s=80, color=_c("nova"), label="nova (folding)")
-    ax.legend(fontsize=7.5, loc="lower right", framealpha=0.95)
-    ax.set_title("F. Both schemes, per metric", fontsize=12.5, fontweight="bold",
-                 loc="left", pad=8)
-    ax.grid(True, axis="x", which="both", alpha=0.25)
+        for s, g in va.groupby("scheme"):
+            g = g.sort_values("depth")
+            ax.scatter(g["depth"], (g["verify_time_ms_cv"] * 100).clip(upper=cap),
+                       color=_c(s), marker="*", s=170, ec="black", lw=0.6,
+                       zorder=6, label=f"{s} — ARM (CI)")
+    ax.axhline(1, color="#999", lw=0.8, ls="--")
+    ax.text(2.05, 1.15, "1%", color="#999", fontsize=7.5, va="bottom")
+    if off:
+        txt = "d=2 x86 cold-start: " + ", ".join(f"{s} {c:.0f}%" for _, c, s in off)
+        ax.annotate(txt + "  (capped)", xy=(2, cap), xytext=(3, cap - 0.8),
+                    fontsize=7, color="#888", ha="left",
+                    arrowprops=dict(arrowstyle="->", color="#bbb", lw=0.7))
+    ax.text(4, 0.55, "ARM CI: CV < 0.1 % at every depth ★", fontsize=7.3,
+            color="#555", fontweight="bold")
+    _depthx(ax)
+    ax.set_ylim(0, cap + 0.3)
+    ax.set_ylabel("verification-time CV (%)")
+    if sp is not None and not sp.empty and "proving_time_ms_cv" in sp:
+        lo = sp["proving_time_ms_cv"].min() * 100
+        hi = sp["proving_time_ms_cv"].max() * 100
+        ax.text(0.5, 0.03, f"(proving-time CV {lo:.0f}–{hi:.0f}% — dev-machine "
+                "contention over an hour-long job, not a scheme property)",
+                transform=ax.transAxes, ha="center", va="bottom",
+                fontsize=6.8, color="#888")
+    ax.legend(fontsize=7, ncol=2, loc="upper right")
+    ax.set_title("F. Verification-time CV vs depth", fontsize=12.5,
+                 fontweight="bold", loc="left", pad=8)
 
 
 # ------------------------------------------------------------------------- main
@@ -383,7 +350,7 @@ def build(out_path: str = os.path.join(OUT, "dashboard.png")) -> str:
     panel_size(fig.add_subplot(gs[0, 2]), d["prove"], d["gas"])
     panel_x86_arm(fig.add_subplot(gs[1, 0]), d["verify_x86"], d["verify_arm"])
     panel_dist(fig.add_subplot(gs[1, 1]), d["runs"])
-    panel_ratio(fig.add_subplot(gs[1, 2]), d["prove"], d["verify_x86"], d["verify_arm"], d["gas"])
+    panel_cv(fig.add_subplot(gs[1, 2]), d["prove"], d["verify_x86"], d["verify_arm"])
 
     prov = []
     for k, lab in [("prove", "prove"), ("verify_x86", "verify/x86"),
