@@ -20,6 +20,9 @@ on:
       - 'analysis/**'
       - '.github/workflows/exp3-arm.yml'
 
+permissions:
+  contents: write
+
 jobs:
   exp3:
     runs-on: ubuntu-24.04-arm
@@ -99,6 +102,17 @@ jobs:
           python analysis/analyze.py --figures
         shell: bash
 
+      - name: Job summary
+        run: |
+          {
+            echo "## Experiment 3 — ARM verification results"
+            echo
+            cat results/exp3_table.md
+            echo
+            cat results_host_info.md
+          } >> "$GITHUB_STEP_SUMMARY"
+        shell: bash
+
       - name: Upload Experiment 3 results
         uses: actions/upload-artifact@v4
         with:
@@ -112,3 +126,21 @@ jobs:
             results/fig_exp3.png
             results_host_info.md
           if-no-files-found: error
+
+      - name: Commit results back to the repo
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          mkdir -p results/exp3
+          cp results/raw/verify_arm_plonky2.csv results/raw/verify_arm_nova.csv \
+             results/summary_verify.csv results/exp3_table.md results_host_info.md \
+             results/exp3/
+          cp -f results/dashboard.png results/fig_exp3.png results/exp3/ 2>/dev/null || true
+          git add -f results/exp3/
+          if git diff --cached --quiet; then
+            echo "no result changes to commit"
+          else
+            git commit -m "exp3-arm: ARM verification results [skip ci]"
+            git push origin HEAD:main
+          fi
+        shell: bash
