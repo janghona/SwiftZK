@@ -207,8 +207,11 @@ def panel_x86_arm(ax, vx, va):
 
 
 def panel_dist(ax, runs):
+    """Per-run spread. Absolute verify times span 50x across groups, so plot
+    each run as % deviation from its own group median — puts all groups on one
+    readable linear axis and shows the actual run-to-run noise."""
     if runs is None or runs.empty:
-        return _ph(ax, "E. Per-run verification-time distribution", "Exp 1/3")
+        return _ph(ax, "E. Per-run verification time", "Exp 1/3")
     d = CMP_DEPTH
     sub = runs[runs["depth"] == d]
     groups, labels, colors = [], [], []
@@ -216,29 +219,29 @@ def panel_dist(ax, runs):
         for s in ("plonky2", "nova"):
             v = sub[(sub["host"] == host) & (sub["scheme"] == s)]["verify_time_ms"].to_numpy()
             if len(v):
-                groups.append(v)
-                labels.append(f"{s}\n{host}\nN={len(v)}")
+                med = float(np.median(v))
+                groups.append((v - med) / med * 100.0)
+                labels.append(f"{s} / {host}\nN={len(v)}\nmed {med:.3g} ms")
                 colors.append(_c(s))
     if not groups:
-        return _ph(ax, "E. Per-run verification-time distribution", "Exp 1/3")
+        return _ph(ax, "E. Per-run verification time", "Exp 1/3")
     pos = np.arange(len(groups))
     rng = np.random.default_rng(0)
     for i, (v, col) in enumerate(zip(groups, colors)):
-        jit = rng.normal(0, 0.06, size=len(v))
-        ax.scatter(np.full(len(v), i) + jit, v, s=6, color=col, alpha=0.25,
-                   lw=0, zorder=2)
+        ax.scatter(np.full(len(v), i) + rng.normal(0, 0.08, len(v)), v,
+                   s=10, color=col, alpha=0.35, lw=0, zorder=2)
     bp = ax.boxplot(groups, positions=pos, widths=0.5, showfliers=False,
                     patch_artist=True, zorder=3)
     for patch, col in zip(bp["boxes"], colors):
-        patch.set_facecolor(col); patch.set_alpha(0.6)
+        patch.set_facecolor(col); patch.set_alpha(0.55)
     for med in bp["medians"]:
         med.set_color("black")
-    ax.set_yscale("log")
-    ax.set_xticks(np.arange(len(groups)))
+    ax.axhline(0, color="#888", lw=0.8, zorder=1)
+    ax.set_xticks(pos)
     ax.set_xticklabels(labels, fontsize=7.5)
-    ax.set_ylabel("verify time per run (ms, log)")
-    ax.set_title("E. Per-run verification time", fontsize=10, loc="left")
-    ax.grid(True, axis="y", which="both", alpha=0.25)
+    ax.set_ylabel("per-run deviation from median (%)")
+    ax.set_title("E. Per-run verification spread", fontsize=10, loc="left")
+    ax.grid(True, axis="y", alpha=0.25)
 
 
 def panel_cv(ax, sp, vx, va):
