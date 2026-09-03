@@ -242,24 +242,27 @@ def panel_x86_arm(ax, vx, va):
 
 
 def panel_dist(ax, runs):
-    """Per-run spread. Absolute verify times span 50x across groups, so plot
-    each run as % deviation from its own group median — puts all groups on one
-    readable linear axis and shows the actual run-to-run noise."""
+    """Not a scheme comparison — a credibility check. Each run as % deviation
+    from its group median; the message is that the dev-machine (x86, N=40) runs
+    carry real noise while the CI-runner (ARM, N=200) runs are ~10x tighter, so
+    the ARM figures are the ones to lean on."""
     if runs is None or runs.empty:
-        return _ph(ax, "E. Per-run verification time", "Exp 1/3")
+        return _ph(ax, "E. Per-run verification spread", "Exp 1/3")
     d = CMP_DEPTH
     sub = runs[runs["depth"] == d]
-    groups, labels, colors = [], [], []
+    groups, labels, colors, iqr = [], [], [], []
     for host in ("x86", "arm"):
         for s in ("plonky2", "nova"):
             v = sub[(sub["host"] == host) & (sub["scheme"] == s)]["verify_time_ms"].to_numpy()
             if len(v):
                 med = float(np.median(v))
-                groups.append((v - med) / med * 100.0)
-                labels.append(f"{s} / {host}\nN={len(v)}\nmed {med:.3g} ms")
+                dev = (v - med) / med * 100.0
+                groups.append(dev)
+                labels.append(f"{s}\nN={len(v)}")
                 colors.append(_c(s))
+                iqr.append(np.percentile(dev, 75) - np.percentile(dev, 25))
     if not groups:
-        return _ph(ax, "E. Per-run verification time", "Exp 1/3")
+        return _ph(ax, "E. Per-run verification spread", "Exp 1/3")
     pos = np.arange(len(groups))
     rng = np.random.default_rng(0)
     for i, (v, col) in enumerate(zip(groups, colors)):
@@ -272,8 +275,19 @@ def panel_dist(ax, runs):
     for med in bp["medians"]:
         med.set_color("black")
     ax.axhline(0, color="#888", lw=0.8, zorder=1)
+
+    # divider + host-group callouts
+    n_x86 = sum(1 for lset in ["x86"] for _ in range(2))  # first two groups are x86
+    if len(groups) == 4:
+        ax.axvline(1.5, color="#bbb", lw=1, ls="--")
+        top = max(np.percentile(g, 98) for g in groups)
+        ax.text(0.5, top * 1.05, f"x86 dev machine · N=40\nIQR ≈ ±{max(iqr[:2]) / 2:.1f} %,"
+                " outliers to +12 %", ha="center", va="bottom", fontsize=7.5, color="#555")
+        ax.text(2.5, top * 1.05, f"ARM CI runner · N=200\nIQR ≈ ±{max(iqr[2:]) / 2:.2f} %",
+                ha="center", va="bottom", fontsize=7.5, color="#555", fontweight="bold")
+        ax.set_ylim(top=top * 1.9)
     ax.set_xticks(pos)
-    ax.set_xticklabels(labels, fontsize=7.5)
+    ax.set_xticklabels(labels, fontsize=8)
     ax.set_ylabel("per-run deviation from median (%)")
     ax.set_title("E. Per-run verification spread", fontsize=12.5, fontweight="bold", loc="left", pad=8)
     ax.grid(True, axis="y", alpha=0.25)
