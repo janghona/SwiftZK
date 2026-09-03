@@ -106,8 +106,7 @@ def panel_time(ax, sp, vx, va):
     _depthx(ax)
     ax.set_yscale("log")
     ax.set_ylabel("time (ms, log)")
-    ax.set_title("A. Time  ·  proving (—) grows with depth, verification (⋯) is flat; ★ ARM",
-                 fontsize=9.5, loc="left")
+    ax.set_title("A. Time vs depth", fontsize=10, loc="left")
     ax.legend(fontsize=6.5, ncol=2)
 
 
@@ -132,8 +131,7 @@ def panel_mem(ax, sp, vx, va):
     _depthx(ax)
     ax.set_yscale("log")
     ax.set_ylabel("peak memory (MiB, log)")
-    ax.set_title("B. Peak memory  ·  prover (—) climbs to GiB, verifier (⋯) stays small; ★ ARM",
-                 fontsize=9.5, loc="left")
+    ax.set_title("B. Peak memory vs depth", fontsize=10, loc="left")
     ax.legend(fontsize=6.5, ncol=2)
 
 
@@ -166,8 +164,7 @@ def panel_size(ax, sp, gas):
         labels.append(f"{s}\n({k})\npost {post}")
     ax.set_xticks(x)
     ax.set_xticklabels(labels, fontsize=7.5)
-    ax.set_title("C. Artifact size  ·  bars = KiB; x-label = raw-proof post gas (Exp 2)",
-                 fontsize=9, loc="left")
+    ax.set_title("C. Proof & verification-key size", fontsize=10, loc="left")
     ax.grid(True, axis="y", which="both", alpha=0.25)
     ax.legend(fontsize=8)
 
@@ -202,8 +199,7 @@ def panel_x86_arm(ax, vx, va):
 
     ax.set_xticks(x)
     ax.set_xticklabels(schemes, fontsize=9)
-    ax.set_title(f"D. Verification x86 vs ARM @ depth {d}  ·  bars = latency, ●/■ = peak RSS",
-                 fontsize=9, loc="left")
+    ax.set_title("D. Verification: x86 vs ARM", fontsize=10, loc="left")
     ax.grid(True, axis="y", which="both", alpha=0.25)
     h1, l1 = ax.get_legend_handles_labels()
     h2, l2 = ax2.get_legend_handles_labels()
@@ -241,8 +237,7 @@ def panel_dist(ax, runs):
     ax.set_xticks(np.arange(len(groups)))
     ax.set_xticklabels(labels, fontsize=7.5)
     ax.set_ylabel("verify time per run (ms, log)")
-    ax.set_title(f"E. Per-run verification time @ depth {d}  ·  all measured runs",
-                 fontsize=9.5, loc="left")
+    ax.set_title("E. Per-run verification time", fontsize=10, loc="left")
     ax.grid(True, axis="y", which="both", alpha=0.25)
 
 
@@ -273,8 +268,7 @@ def panel_cv(ax, sp, vx, va):
                 arrowprops=dict(arrowstyle="->", color="#aaa", lw=0.7))
     _depthx(ax)
     ax.set_ylabel("coefficient of variation (%)")
-    ax.set_title("F. Measurement stability  ·  CV of timing runs; lower = tighter",
-                 fontsize=9.5, loc="left")
+    ax.set_title("F. Timing stability (CV)", fontsize=10, loc="left")
     ax.legend(fontsize=6.5, ncol=2, loc="upper right")
 
 
