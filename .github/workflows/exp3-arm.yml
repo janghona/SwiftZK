@@ -9,15 +9,14 @@ name: exp3-arm
 # results/raw/, then run `python analysis/analyze.py --figures`.
 
 on:
-  workflow_dispatch:
+  workflow_dispatch:        # re-run by hand from the Actions tab
   push:
     branches: [main]
-    paths:
+    paths:                  # only when something that changes the measurement moves
       - 'crates/**'
       - 'Cargo.toml'
       - 'Cargo.lock'
       - 'rust-toolchain.toml'
-      - 'analysis/**'
       - '.github/workflows/exp3-arm.yml'
 
 permissions:

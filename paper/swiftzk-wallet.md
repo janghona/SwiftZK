@@ -365,9 +365,10 @@ collapses Nova's 10 MiB IPA key to a constant-size key, at the cost of a trusted
 setup.
 
 **Experiment 3 — ARM mobile-class.** A GitHub-hosted `ubuntu-24.04-arm` runner
-(Ampere Altra, Neoverse-N1 — the same core family as the ARM cloud instances we
-would otherwise rent), pinned to **one core** (`taskset -c 0`) as a mobile-ISA /
-constrained-client proxy. The workflow (`.github/workflows/exp3-arm.yml`) builds
+(Azure `aarch64`, **Neoverse-N2**, 4 cores, L2 4 MiB / L3 128 MiB, kernel
+6.17-azure — an ARM core family also used by current cloud ARM instances),
+pinned to **one core** (`taskset -c 0`) as a mobile-ISA / constrained-client
+proxy. The workflow (`.github/workflows/exp3-arm.yml`) builds
 the *same verifier binary* as Experiment 1, regenerates the `d ∈ {8, 16}` proofs
 (deterministic; verification cost is independent of where the proof was
 produced), and runs 20 warmup + 200 measured verification runs per depth.
@@ -476,22 +477,23 @@ in §6.2.
 ### 6.4 Experiment 3 — Results
 
 **Table 3.** ARM mobile-class verification, Plonky2 vs Nova — GitHub-hosted
-`ubuntu-24.04-arm` (Neoverse-N1), one pinned core, 20 warmup + 200 measured runs,
+`ubuntu-24.04-arm` (Neoverse-N2), one pinned core, 20 warmup + 200 measured runs,
 mean ± 95% CI (`results/exp3_table.md`).
 
 | Scheme | Kind | Depth | Verify Latency (ms) | Peak RSS (MiB) |
 |---|---|---:|---:|---:|
-| plonky2 | recursive | 8 | 4.579 ± 0.002 | 3.2 |
-| plonky2 | recursive | 16 | 4.576 ± 0.001 | 3.2 |
-| nova | folding | 8 | 262.15 ± 0.12 | 31.9 |
-| nova | folding | 16 | 259.22 ± 0.13 | 34.2 |
+| plonky2 | recursive | 8 | 4.569 ± 0.001 | 3.2 |
+| plonky2 | recursive | 16 | 4.567 ± 0.001 | 3.2 |
+| nova | folding | 8 | 260.67 ± 0.04 | 31.9 |
+| nova | folding | 16 | 258.45 ± 0.06 | 34.2 |
 
 **Observations.** The Experiment 1 ordering holds on ARM and in fact widens.
-Plonky2's FRI verification is essentially ISA-insensitive here — 4.58 ms on
-Neoverse-N1 versus 4.85 ms on the x86 host — while Nova's decider (MSM-heavy
-Spartan/IPA) slows to ≈260 ms, ≈1.6× its x86 figure. Recursive verification is
-thus **≈57× faster** on ARM (4.58 ms vs 260 ms) and uses **≈10×** less process
-memory (3.2 MiB vs 32–34 MiB); both are flat in aggregation depth. (The ARM
+Plonky2's FRI verification is essentially ISA-insensitive here — 4.57 ms on
+Neoverse-N2 versus 4.85 ms on the x86 host — while Nova's decider (MSM-heavy
+Spartan/IPA) slows to ≈259 ms, ≈1.6× its x86 figure. Recursive verification is
+thus **≈57× faster** on ARM (4.57 ms vs 259 ms) and uses **≈10×** less process
+memory (3.2 MiB vs 32–34 MiB); both are flat in aggregation depth. The CI on
+200 runs is ±0.02 % (Plonky2) and ±0.02 % (Nova) — the shared CI VM was quiet. (The ARM
 memory figures are process peak RSS, `VmHWM`; the 0.47 MiB x86 Plonky2 figure in
 Table 1a is a tracking-allocator heap peak on Windows — a different, lower basis.
 The ARM RSS numbers are the like-for-like pair.) A 4.6 ms / 3 MiB verification
@@ -531,14 +533,16 @@ check plus a commitment-key–sized verification key for folding).
 Rust `nightly-2026-09-02`. Crates: `plonky2` 1.1, `nova-snark` 0.75,
 `peak_alloc` 0.2. Release profile `opt-level=3, lto=true, codegen-units=1`.
 Foundry `forge 1.8.1`, `solc 0.8.24`. Experiment 3: GitHub-hosted
-`ubuntu-24.04-arm` runner (Ampere Altra, Neoverse-N1, ~3.0 GHz; exact `lscpu` in
-the workflow run log / `results_host_info.md`), verifier pinned to one core.
-Artefacts: `results/summary_*.csv`, `results/raw/*.csv`, `proofs/*.{bin,vk}`; the
-`exp3-arm` workflow is the executable Experiment 3 protocol.
+`ubuntu-24.04-arm` runner — Azure `aarch64`, ARM Neoverse-N2, 4 cores,
+L1d/L1i 256 KiB, L2 4 MiB, L3 128 MiB, kernel `6.17.0-1022-azure` (full `lscpu`
+in `results/exp3/results_host_info.md`); verifier pinned to core 0. Artefacts:
+`results/summary_*.csv`, `results/raw/*.csv`, `results/exp3/*`,
+`proofs/*.{bin,vk}`; the `exp3-arm` workflow is the executable Experiment 3
+protocol.
 
 **Limitations.** Single workload family. Each ZK family is instantiated with one
 implementation (Plonky2, Nova); Halo2 and SuperNova are discussed but not
-benchmarked. Experiment 3 runs on a Neoverse-N1 core (a server-class ARM part
+benchmarked. Experiment 3 runs on a Neoverse-N2 core (a server-class ARM part
 sharing the mobile ISA) on a shared CI VM, not a phone SoC or a dedicated
 machine; we mitigate with 200 runs and report variance, and on-device
 measurement remains future work. Plonky2 lacks a native EVM verifier, so its

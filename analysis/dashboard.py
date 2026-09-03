@@ -184,7 +184,7 @@ def panel_x86_arm(ax, vx, va):
     lat_x86 = [x86.loc[s, "verify_time_ms_mean"] if s in x86.index else np.nan for s in schemes]
     lat_arm = [arm.loc[s, "verify_time_ms_mean"] for s in schemes]
     b1 = ax.bar(x - w / 2, lat_x86, w, label="latency x86", color="#9DB4C0")
-    b2 = ax.bar(x + w / 2, lat_arm, w, label="latency ARM (Neoverse-N1)", color="#5C6B73")
+    b2 = ax.bar(x + w / 2, lat_arm, w, label="latency ARM (Neoverse-N2)", color="#5C6B73")
     ax.set_yscale("log")
     allv = [v for v in lat_x86 + lat_arm if not np.isnan(v)]
     ax.set_ylim(min(allv) * 0.3, max(allv) * 8)
