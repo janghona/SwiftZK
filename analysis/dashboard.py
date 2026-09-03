@@ -318,11 +318,8 @@ def panel_cv(ax, sp, vx, va):
                        label=f"{s} — verify (ARM)")
     ax.axhline(10, color="#c00", lw=0.8, ls="--", alpha=0.6)
     ax.text(2, 10.5, "10%", color="#c00", fontsize=7, va="bottom")
-    ax.annotate("nova d=2: cold-start warmup artifact", xy=(4.2, 55),
+    ax.annotate("d=2: cold-start warmup\n(prove & verify)", xy=(4.2, 52),
                 fontsize=6.5, color="#888", ha="left", va="center")
-    ax.annotate("plonky2 prove d=32:\nhost noise", xy=(20, 18), xytext=(9, 30),
-                fontsize=6.5, color="#888",
-                arrowprops=dict(arrowstyle="->", color="#aaa", lw=0.7))
     _depthx(ax)
     ax.set_ylabel("coefficient of variation (%)")
     ax.legend(fontsize=6.5, ncol=2)
