@@ -29,5 +29,5 @@
 | plonky2 | recursive | 4 | 3962.6 ± 115.1 | 191.9 |
 | plonky2 | recursive | 8 | 9110.3 ± 110.2 | 342.3 |
 | plonky2 | recursive | 16 | 19393.8 ± 158.8 | 643.2 |
-| plonky2 | recursive | 32 | 38229.8 ± 4900.3 | 1245.0 |
+| plonky2 | recursive | 32 | 41130.0 ± 370.7 | 1245.0 |
 | plonky2 | recursive | 64 | 137844.5 ± 2181.9 | 2448.6 |

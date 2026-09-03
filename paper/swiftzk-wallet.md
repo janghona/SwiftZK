@@ -414,7 +414,7 @@ measured proving runs and 10 warmup + 40 measured verification runs per depth
 | plonky2 | recursive | 4 | 3962.6 ± 115.1 | 191.9 |
 | plonky2 | recursive | 8 | 9110.3 ± 110.2 | 342.3 |
 | plonky2 | recursive | 16 | 19393.8 ± 158.8 | 643.2 |
-| plonky2 | recursive | 32 | 38229.8 ± 4900.3 | 1245.0 |
+| plonky2 | recursive | 32 | 41130.0 ± 370.7 | 1245.0 |
 | plonky2 | recursive | 64 | 137844.5 ± 2181.9 | 2448.6 |
 
 **Observations.**
@@ -436,8 +436,8 @@ measured proving runs and 10 warmup + 40 measured verification runs per depth
    `d = 2…64`) at constant ≈131 MiB; Plonky2's linear wrap chain grows
    super-linearly (0.9 s → 138 s) and its prover memory grows with depth
    (117 MiB → 2.45 GiB). Folding is the better *prover* for deep aggregation.
-   (The `d = 32` Plonky2 proving CV of 18 % reflects host noise; a quiet-machine
-   re-run is planned.)
+   (Plonky2 proving CV is under 5 % for `d ≥ 4`; the `d = 2` row is a
+   cold-start outlier with a wide CI.)
 
 Figure 2 (`results/fig_exp1.png`) and the consolidated dashboard
 (`results/dashboard.png`) plot all metrics vs. depth.
