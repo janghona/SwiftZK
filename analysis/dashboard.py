@@ -136,37 +136,57 @@ def panel_mem(ax, sp, vx, va):
 
 
 def panel_size(ax, sp, gas):
+    """The folding trade-off, per metric: folding's aggregate proof is far
+    smaller, but its verification key is enormous. Grouped by metric so the
+    per-metric ratio (and which family wins it) is the headline."""
     need = {"proof_size_kib_mean", "vk_size_kib_mean"}
     if sp is None or sp.empty or not need.issubset(sp.columns):
-        return _ph(ax, "C. Artifact size & on-chain cost", "Exp 1")
-    one = sp.sort_values("depth").groupby("scheme", as_index=False).first()
-    schemes = list(one["scheme"])
-    x = np.arange(len(schemes))
-    w = 0.38
-    b1 = ax.bar(x - w / 2, one["proof_size_kib_mean"], w, label="aggregate proof",
-                color="#4C78A8")
-    b2 = ax.bar(x + w / 2, one["vk_size_kib_mean"], w, label="verification key",
-                color="#F58518")
-    ax.set_yscale("log")
-    ax.set_ylabel("KiB (log)")
-    for bars in (b1, b2):
-        for b in bars:
-            v = b.get_height()
+        return _ph(ax, "C. Proof & verification-key size", "Exp 1")
+    one = (sp.sort_values("depth").groupby("scheme", as_index=False).first()
+           .set_index("scheme"))
+    order = [s for s in ["nova", "plonky2", "halo2", "supernova"] if s in one.index]
+    metrics = [("aggregate\nproof", "proof_size_kib_mean"),
+               ("verification\nkey", "vk_size_kib_mean")]
+    x = np.arange(len(metrics))
+    w = 0.8 / max(len(order), 1)
+    for j, s in enumerate(order):
+        vals = [one.loc[s, col] for _, col in metrics]
+        off = (j - (len(order) - 1) / 2) * w
+        bars = ax.bar(x + off, vals, w * 0.92, color=_c(s),
+                      label=f'{s} ({one.loc[s, "kind"]})')
+        for b, v in zip(bars, vals):
             ax.annotate(f"{v:,.1f}" if v < 100 else f"{v:,.0f}",
                         (b.get_x() + b.get_width() / 2, v), ha="center",
-                        va="bottom", fontsize=7)
-    # on-chain raw-proof post cost from Exp 2, annotated under each scheme
-    labels = []
-    for s in schemes:
-        gg = gas[(gas["scheme"] == s)] if gas is not None and not gas.empty else pd.DataFrame()
-        post = f"{gg['tx_exec_cost'].iloc[0] / 1000:,.0f}k gas" if len(gg) else "—"
-        k = one.loc[one["scheme"] == s, "kind"].iloc[0]
-        labels.append(f"{s}\n({k})\npost {post}")
+                        va="bottom", fontsize=7.5)
+    ax.set_yscale("log")
+    ax.set_ylim(top=one[[c for _, c in metrics]].to_numpy().max() * 120)
+    ax.set_ylabel("KiB (log)")
+
+    post_ratio = None
+    if gas is not None and not gas.empty:
+        g = gas.groupby("scheme")["tx_exec_cost"].first()
+        if {"nova", "plonky2"}.issubset(g.index):
+            post_ratio = max(g["nova"], g["plonky2"]) / min(g["nova"], g["plonky2"])
+
+    if {"nova", "plonky2"}.issubset(one.index):
+        top_all = one[[c for _, c in metrics]].to_numpy().max()
+        for i, (_, col) in enumerate(metrics):
+            nv, pv = one.loc["nova", col], one.loc["plonky2", col]
+            hi, lo = max(nv, pv), min(nv, pv)
+            win = "folding" if nv < pv else "recursion"
+            col_ = _c("nova") if nv < pv else _c("plonky2")
+            txt = f"{win}\n×{hi / lo:,.0f} smaller"
+            if i == 0 and post_ratio:
+                txt += f"  (post ×{post_ratio:,.0f})"
+            ax.text(i, top_all * 3.0, txt, ha="center", va="bottom",
+                    fontsize=9, fontweight="bold", color=col_)
+
     ax.set_xticks(x)
-    ax.set_xticklabels(labels, fontsize=7.5)
-    ax.set_title("C. Proof & verification-key size", fontsize=12.5, fontweight="bold", loc="left", pad=8)
+    ax.set_xticklabels([m for m, _ in metrics], fontsize=9.5)
+    ax.set_title("C. Proof & verification-key size", fontsize=12.5,
+                 fontweight="bold", loc="left", pad=8)
     ax.grid(True, axis="y", which="both", alpha=0.25)
-    ax.legend(fontsize=8)
+    ax.legend(fontsize=7.5, loc="upper left")
 
 
 def panel_x86_arm(ax, vx, va):
