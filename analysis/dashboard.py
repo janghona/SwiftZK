@@ -13,7 +13,7 @@ Six consolidated panels, driven entirely by the experiment CSVs:
     C  artifact size        aggregate proof & verification key (+ on-chain post cost)
     D  x86 vs ARM           verification latency and peak RSS side by side
     E  per-run spread    per-run deviation from median at one depth (dev vs CI noise)
-    F  stability          CV of proving + verification timing, all series on log-y
+    F  stability          verification-time CV, clean series only (dev + CI), depth>=4
 
 Each panel degrades to an "awaiting data" placeholder. No numbers are invented.
 Usage:  python analysis/dashboard.py            # -> results/dashboard.png
@@ -294,44 +294,33 @@ def panel_dist(ax, runs):
 
 
 def panel_cv(ax, sp, vx, va):
-    """Coefficient of variation of the timing runs, everything plotted on one
-    log axis: proving CV (solid, ~3-40% — dev-machine contention), verification
-    CV on x86 (dotted, ~2-5%, d=2 cold-start), verification CV on the ARM CI
-    runner (stars, <0.1%). ~3 orders of magnitude, so log-y."""
-    if (sp is None or sp.empty) and (vx is None or vx.empty):
-        return _ph(ax, "F. Coefficient of variation vs depth", "Exp 1")
-
-    if sp is not None and not sp.empty and "proving_time_ms_cv" in sp:
-        for s, g in sp.groupby("scheme"):
-            g = g.sort_values("depth")
-            ax.plot(g["depth"], g["proving_time_ms_cv"] * 100, color=_c(s), ls="-",
-                    marker="o", ms=4, lw=1.6, label=f"{s} — prove")
-    if vx is not None and not vx.empty:
-        for s, g in vx.groupby("scheme"):
-            g = g.sort_values("depth")
-            ax.plot(g["depth"], g["verify_time_ms_cv"] * 100, color=_c(s), ls=":",
-                    marker="v", ms=5, label=f"{s} — verify x86")
-            n2 = g[g["depth"] == 2]["verify_time_ms_cv"]
-            if len(n2) and n2.iloc[0] * 100 > 20:
-                ax.annotate("d=2 cold start", xy=(2, n2.iloc[0] * 100),
-                            xytext=(2.4, n2.iloc[0] * 100 * 0.45), fontsize=7,
-                            color="#888", ha="left", arrowprops=dict(
-                            arrowstyle="->", color="#bbb", lw=0.7))
+    """Stability of the metric the conclusions rest on: verification-time CV
+    vs depth. Only the clean series are drawn — x86 dev machine (~2-5%) and the
+    ARM CI runner (<0.2%), depth >= 4. The d=2 cold-start and the noisy
+    proving-time CV (dev-machine contention) are excluded and noted."""
+    if vx is None or vx.empty:
+        return _ph(ax, "F. Verification-timing stability", "Exp 1")
+    for s, g in vx.groupby("scheme"):
+        g = g[g["depth"] >= 4].sort_values("depth")
+        ax.plot(g["depth"], g["verify_time_ms_cv"] * 100, color=_c(s), ls=":",
+                marker="v", ms=6, lw=1.6, label=f"{s} — x86 (dev)")
     if va is not None and not va.empty:
         for s, g in va.groupby("scheme"):
-            g = g.sort_values("depth")
+            g = g[g["depth"] >= 4].sort_values("depth")
             ax.scatter(g["depth"], g["verify_time_ms_cv"] * 100, color=_c(s),
-                       marker="*", s=170, ec="black", lw=0.6, zorder=6,
-                       label=f"{s} — verify ARM")
+                       marker="*", s=190, ec="black", lw=0.6, zorder=6,
+                       label=f"{s} — ARM (CI)")
     _depthx(ax)
     ax.set_yscale("log")
-    ax.set_ylabel("coefficient of variation (%, log)")
+    ax.set_ylim(0.03, 20)
+    ax.set_ylabel("verification-time CV (%, log)")
     ax.axhline(1, color="#999", lw=0.8, ls="--")
-    ax.text(2.05, 1.12, "1%", color="#999", fontsize=7.5, va="bottom")
-    ax.set_ylim(top=320)
-    ax.legend(fontsize=6.2, ncol=3, loc="upper center", framealpha=0.92,
-              borderpad=0.3, columnspacing=0.9, handletextpad=0.4)
-    ax.set_title("F. Measurement stability (CV vs depth)", fontsize=12.5,
+    ax.text(4.1, 1.13, "1%", color="#999", fontsize=7.5, va="bottom")
+    ax.text(0.5, 0.03, "d=2 (cold-start warmup) and proving-time CV "
+            "(dev-machine contention) excluded", transform=ax.transAxes,
+            ha="center", va="bottom", fontsize=6.8, color="#888")
+    ax.legend(fontsize=7, ncol=2, loc="upper center", framealpha=0.9)
+    ax.set_title("F. Verification-timing stability", fontsize=12.5,
                  fontweight="bold", loc="left", pad=8)
 
 
