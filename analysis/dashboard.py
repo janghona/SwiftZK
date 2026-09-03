@@ -15,7 +15,6 @@ Panels (each degrades to an "awaiting data" placeholder):
     D  proof size vs verification-key size, per scheme (log-y bars)
     E  EVM cost (Exp 2): decider-verify gas vs raw-proof calldata gas (log-y bars)
     F  verification cost x86 vs ARM (Exp 1 vs Exp 3), latency + peak mem
-    G  selection scorecard @ REF_DEPTH
 
 No numbers are invented here.
 
@@ -35,7 +34,6 @@ import pandas as pd  # noqa: E402
 from matplotlib.gridspec import GridSpec  # noqa: E402
 
 OUT = "results"
-REF_DEPTH = 32          # depth for the selection scorecard (x86 sweep)
 ARM_REF_DEPTH = 16      # depth for the x86-vs-ARM comparison (Exp 3 ran 8, 16)
 
 SCHEME_COLOR = {
@@ -240,87 +238,12 @@ def panel_x86_vs_arm(ax, vx, va):
     ax.legend(fontsize=8, loc="upper left")
 
 
-def panel_scorecard(ax, sp, vx):
-    ax.axis("off")
-    ax.set_title(f"G. Selection scorecard @ depth {REF_DEPTH}  "
-                 f"(wallet-side; lower = better; ● = best)", fontsize=10, loc="left")
-    if sp is None or sp.empty:
-        return _placeholder(ax, "", "Exp 1")
-    p = sp[sp["depth"] == REF_DEPTH].set_index("scheme")
-    v = (vx[vx["depth"] == REF_DEPTH].set_index("scheme")
-         if vx is not None and not vx.empty else pd.DataFrame())
-    has_vk = "vk_size_kib_mean" in sp.columns
-
-    rows = []
-    for s in ["halo2", "plonky2", "nova", "supernova"]:
-        if s not in p.index:
-            continue
-        hv = not v.empty and s in v.index
-        rows.append((
-            s, p.loc[s, "kind"],
-            v.loc[s, "verify_time_ms_mean"] if hv else np.nan,
-            v.loc[s, "peak_mem_mib_mean"] if hv else np.nan,
-            p.loc[s, "proof_size_kib_mean"],
-            p.loc[s, "vk_size_kib_mean"] if has_vk else np.nan,
-        ))
-    if not rows:
-        return _placeholder(ax, "", "Exp 1")
-    df = pd.DataFrame(rows, columns=["scheme", "kind", "vt", "vm", "pf", "vk"])
-    metric_cols = ["vt", "vm", "pf", "vk"]
-    best = {c: (df[c].idxmin() if df[c].notna().any() else None) for c in metric_cols}
-
-    def f_ms(x):
-        return f"{x:,.2f}"
-
-    def f_mib(x):
-        return f"{x:,.2f}" if x < 10 else f"{x:,.0f}"
-
-    def f_kib(x):
-        return f"{x:,.2f}" if x < 100 else f"{x:,.0f}"
-
-    fmt = {"vt": f_ms, "vm": f_mib, "pf": f_kib, "vk": f_kib}
-    cells, colors = [], []
-    for i, r in df.iterrows():
-        rc, cc = [r["scheme"], r["kind"]], ["#f5f5f5", "#f5f5f5"]
-        for c in metric_cols:
-            val = r[c]
-            t = "—" if pd.isna(val) else fmt[c](val)
-            if best[c] == i:
-                t = "● " + t
-                cc.append("#cdebcd")
-            else:
-                cc.append("#ffffff")
-            rc.append(t)
-        cells.append(rc)
-        colors.append(cc)
-    tbl = ax.table(
-        cellText=cells, cellColours=colors,
-        colLabels=["scheme", "kind", "verify (ms)", "verify mem (MiB)",
-                   "proof (KiB)", "vk (KiB)"],
-        cellLoc="center", bbox=[0.0, 0.05, 1.0, 0.95])
-    tbl.auto_set_font_size(False)
-    tbl.set_fontsize(9)
-    for (row, _), cell in tbl.get_celld().items():
-        if row == 0:
-            cell.set_text_props(fontweight="bold")
-
-
 # ------------------------------------------------------------------------- main
 def build(out_path: str = os.path.join(OUT, "dashboard.png")) -> str:
     d = load()
-    fig = plt.figure(figsize=(16, 10.8))
-    gs = GridSpec(3, 3, figure=fig, hspace=0.38, wspace=0.27,
-                  height_ratios=[1.0, 1.0, 0.42],
-                  top=0.9, bottom=0.055, left=0.06, right=0.985)
-
-    fig.suptitle(
-        "SwiftZK-Wallet — Recursive (Plonky2) vs Folding (Nova) ZK Aggregation, "
-        "Wallet-Side Verification",
-        fontsize=15, fontweight="bold", x=0.06, ha="left", y=0.965)
-    fig.text(0.06, 0.933,
-             "Exp 1: native x86 depth sweep 2–64  ·  Exp 2: EVM verification cost "
-             "(Foundry / BN254)  ·  Exp 3: ARM Neoverse-N1 verification.",
-             fontsize=9.5, color="#555", ha="left")
+    fig = plt.figure(figsize=(16, 8.2))
+    gs = GridSpec(2, 3, figure=fig, hspace=0.42, wspace=0.27,
+                  top=0.955, bottom=0.09, left=0.06, right=0.985)
 
     panel_prove_time(fig.add_subplot(gs[0, 0]), d["prove"])
     panel_verify_time(fig.add_subplot(gs[0, 1]), d["verify_x86"], d["verify_arm"])
@@ -328,14 +251,13 @@ def build(out_path: str = os.path.join(OUT, "dashboard.png")) -> str:
     panel_sizes(fig.add_subplot(gs[1, 0]), d["prove"])
     panel_evm(fig.add_subplot(gs[1, 1]), d["gas"])
     panel_x86_vs_arm(fig.add_subplot(gs[1, 2]), d["verify_x86"], d["verify_arm"])
-    panel_scorecard(fig.add_subplot(gs[2, :]), d["prove"], d["verify_x86"])
 
     prov = []
     for k, lab in [("prove", "prove"), ("verify_x86", "verify/x86"),
                    ("verify_arm", "verify/arm"), ("gas", "gas")]:
         n = 0 if d[k] is None or d[k].empty else len(d[k])
         prov.append(f"{lab}:{n}")
-    fig.text(0.06, 0.015,
+    fig.text(0.06, 0.02,
              "rows — " + "  |  ".join(prov)
              + f"    ·    generated {_dt.datetime.now():%Y-%m-%d %H:%M}",
              fontsize=8, color="#888", ha="left")
