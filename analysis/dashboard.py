@@ -292,19 +292,83 @@ def panel_dist(ax, runs):
     ax.grid(True, axis="y", alpha=0.25)
 
 
+def panel_ratio(ax, sp, vx, va, gas):
+    """Synthesis: folding-vs-recursion cost ratio per metric. Bar length = the
+    multiplier (log x); colour = which family is cheaper on that metric. On
+    every wallet-side metric recursion wins (10x–5,600x); folding wins only
+    bandwidth / on-chain, by ~12x."""
+    if sp is None or sp.empty or vx is None or vx.empty:
+        return _ph(ax, "F. Cost ratio by metric", "Exp 1")
+
+    def piv(df, col, host=None, dep=None):
+        d = df if host is None else df[df["host"] == host]
+        if dep is not None and "depth" in d:
+            d = d[d["depth"] == dep] if dep in set(d["depth"]) else d[d["depth"] == d["depth"].max()]
+        d = d.groupby("scheme")[col].first()
+        return d.get("nova"), d.get("plonky2")
+
+    rows = []  # (label, ratio, winner)  winner in {"recursion","folding"}
+    n, p = piv(vx, "verify_time_ms_mean", "x86", 16)
+    if n and p:
+        rows.append(("verify time (x86)", n / p, "recursion"))
+    if va is not None and not va.empty:
+        n, p = piv(va, "verify_time_ms_mean", "arm", 16)
+        if n and p:
+            rows.append(("verify time (ARM)", n / p, "recursion"))
+        n, p = piv(va, "peak_mem_mib_mean", "arm", 16)
+        if n and p:
+            rows.append(("verify memory (ARM RSS)", n / p, "recursion"))
+    one = sp.groupby("scheme").first()
+    if {"nova", "plonky2"}.issubset(one.index):
+        rows.append(("verification key", one.loc["nova", "vk_size_kib_mean"]
+                     / one.loc["plonky2", "vk_size_kib_mean"], "recursion"))
+        rows.append(("aggregate proof", one.loc["plonky2", "proof_size_kib_mean"]
+                     / one.loc["nova", "proof_size_kib_mean"], "folding"))
+    if gas is not None and not gas.empty:
+        g = gas.groupby("scheme")["tx_exec_cost"].first()
+        if {"nova", "plonky2"}.issubset(g.index):
+            rows.append(("on-chain proof post", g["plonky2"] / g["nova"], "folding"))
+    if not rows:
+        return _ph(ax, "F. Cost ratio by metric", "Exp 1")
+
+    # wallet-side metrics first (recursion wins), then bandwidth/on-chain
+    rows.sort(key=lambda r: (r[2] != "recursion", -r[1]))
+    y = np.arange(len(rows))[::-1]
+    xmax = max(r[1] for r in rows)
+    for yi, (lab, ratio, win) in zip(y, rows):
+        col = _c("plonky2") if win == "recursion" else _c("nova")
+        ax.barh(yi, ratio, height=0.6, color=col, alpha=0.85, zorder=2)
+        ax.text(1.4, yi, f"×{ratio:,.0f}  {win} cheaper", va="center",
+                ha="left", fontsize=8.5, fontweight="bold", color=col, zorder=4)
+    ax.axvline(1, color="#333", lw=1.2, zorder=3)
+    ax.set_xscale("log")
+    ax.set_xlim(0.8, xmax * 3.5)
+    ax.set_ylim(-0.6, len(rows) - 0.4)
+    ax.set_yticks(y)
+    ax.set_yticklabels([r[0] for r in rows], fontsize=8.5)
+    ax.set_xlabel("cost ratio (log)  ·  ← folding cheaper | recursion cheaper →")
+    n_wallet = sum(1 for r in rows if r[2] == "recursion")
+    if 0 < n_wallet < len(rows):
+        ax.axhline((y[n_wallet - 1] + y[n_wallet]) / 2, color="#999",
+                   lw=1.1, ls="--", zorder=1)
+    ax.set_title("F. Cost ratio by metric", fontsize=12.5, fontweight="bold",
+                 loc="left", pad=8)
+    ax.grid(True, axis="x", which="both", alpha=0.25)
+
+
 # ------------------------------------------------------------------------- main
 def build(out_path: str = os.path.join(OUT, "dashboard.png")) -> str:
     d = load()
     fig = plt.figure(figsize=(16.5, 9))
-    # 3 panels on top, 2 centred below (6-col grid so the bottom pair centres)
-    gs = GridSpec(2, 6, figure=fig, hspace=0.44, wspace=0.9,
+    gs = GridSpec(2, 3, figure=fig, hspace=0.44, wspace=0.34,
                   top=0.945, bottom=0.09, left=0.055, right=0.965)
 
-    panel_time(fig.add_subplot(gs[0, 0:2]), d["prove"], d["verify_x86"], d["verify_arm"])
-    panel_mem(fig.add_subplot(gs[0, 2:4]), d["prove"], d["verify_x86"], d["verify_arm"])
-    panel_size(fig.add_subplot(gs[0, 4:6]), d["prove"], d["gas"])
-    panel_x86_arm(fig.add_subplot(gs[1, 1:3]), d["verify_x86"], d["verify_arm"])
-    panel_dist(fig.add_subplot(gs[1, 3:5]), d["runs"])
+    panel_time(fig.add_subplot(gs[0, 0]), d["prove"], d["verify_x86"], d["verify_arm"])
+    panel_mem(fig.add_subplot(gs[0, 1]), d["prove"], d["verify_x86"], d["verify_arm"])
+    panel_size(fig.add_subplot(gs[0, 2]), d["prove"], d["gas"])
+    panel_x86_arm(fig.add_subplot(gs[1, 0]), d["verify_x86"], d["verify_arm"])
+    panel_dist(fig.add_subplot(gs[1, 1]), d["runs"])
+    panel_ratio(fig.add_subplot(gs[1, 2]), d["prove"], d["verify_x86"], d["verify_arm"], d["gas"])
 
     prov = []
     for k, lab in [("prove", "prove"), ("verify_x86", "verify/x86"),
