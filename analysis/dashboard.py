@@ -12,8 +12,7 @@ Six consolidated panels, driven entirely by the experiment CSVs:
     B  peak memory vs depth prover vs verifier, both schemes, + ARM points
     C  artifact size        aggregate proof & verification key (+ on-chain post cost)
     D  x86 vs ARM           verification latency and peak RSS side by side
-    E  per-run distribution box plot of individual verification-time measurements
-    F  measurement stability coefficient of variation vs depth
+    E  per-run spread    per-run deviation from median; dev-machine vs CI-runner noise
 
 Each panel degrades to an "awaiting data" placeholder. No numbers are invented.
 Usage:  python analysis/dashboard.py            # -> results/dashboard.png
@@ -293,50 +292,19 @@ def panel_dist(ax, runs):
     ax.grid(True, axis="y", alpha=0.25)
 
 
-def panel_cv(ax, sp, vx, va):
-    if sp is None or sp.empty:
-        return _ph(ax, "F. Measurement stability (CV)", "Exp 1")
-    for s, g in sp.groupby("scheme"):
-        g = g.sort_values("depth")
-        ax.plot(g["depth"], g["proving_time_ms_cv"] * 100, color=_c(s), ls="-",
-                marker="o", ms=4, label=f"{s} — prove time")
-    if vx is not None and not vx.empty:
-        for s, g in vx.groupby("scheme"):
-            g = g.sort_values("depth")
-            ax.plot(g["depth"], g["verify_time_ms_cv"] * 100, color=_c(s), ls=":",
-                    marker="v", ms=4, label=f"{s} — verify time (x86)")
-    if va is not None and not va.empty:
-        for s, g in va.groupby("scheme"):
-            g = g.sort_values("depth")
-            ax.scatter(g["depth"], g["verify_time_ms_cv"] * 100, color=_c(s),
-                       marker="*", s=130, ec="black", lw=0.6, zorder=6,
-                       label=f"{s} — verify (ARM)")
-    ax.axhline(10, color="#c00", lw=0.8, ls="--", alpha=0.6)
-    ax.text(2.05, 10.8, "10%", color="#c00", fontsize=7, va="bottom")
-    ax.annotate("nova d=2: cold-start warmup artifact", xy=(4.2, 55),
-                fontsize=6.5, color="#888", ha="left", va="center")
-    ax.annotate("plonky2 prove d=32:\nhost noise", xy=(20, 18), xytext=(9, 30),
-                fontsize=6.5, color="#888",
-                arrowprops=dict(arrowstyle="->", color="#aaa", lw=0.7))
-    _depthx(ax)
-    ax.set_ylabel("coefficient of variation (%)")
-    ax.set_title("F. Timing stability (CV)", fontsize=12.5, fontweight="bold", loc="left", pad=8)
-    ax.legend(fontsize=6.5, ncol=2, loc="upper right")
-
-
 # ------------------------------------------------------------------------- main
 def build(out_path: str = os.path.join(OUT, "dashboard.png")) -> str:
     d = load()
     fig = plt.figure(figsize=(16.5, 9))
-    gs = GridSpec(2, 3, figure=fig, hspace=0.44, wspace=0.32,
-                  top=0.945, bottom=0.09, left=0.055, right=0.955)
+    # 3 panels on top, 2 centred below (6-col grid so the bottom pair centres)
+    gs = GridSpec(2, 6, figure=fig, hspace=0.44, wspace=0.9,
+                  top=0.945, bottom=0.09, left=0.055, right=0.965)
 
-    panel_time(fig.add_subplot(gs[0, 0]), d["prove"], d["verify_x86"], d["verify_arm"])
-    panel_mem(fig.add_subplot(gs[0, 1]), d["prove"], d["verify_x86"], d["verify_arm"])
-    panel_size(fig.add_subplot(gs[0, 2]), d["prove"], d["gas"])
-    panel_x86_arm(fig.add_subplot(gs[1, 0]), d["verify_x86"], d["verify_arm"])
-    panel_dist(fig.add_subplot(gs[1, 1]), d["runs"])
-    panel_cv(fig.add_subplot(gs[1, 2]), d["prove"], d["verify_x86"], d["verify_arm"])
+    panel_time(fig.add_subplot(gs[0, 0:2]), d["prove"], d["verify_x86"], d["verify_arm"])
+    panel_mem(fig.add_subplot(gs[0, 2:4]), d["prove"], d["verify_x86"], d["verify_arm"])
+    panel_size(fig.add_subplot(gs[0, 4:6]), d["prove"], d["gas"])
+    panel_x86_arm(fig.add_subplot(gs[1, 1:3]), d["verify_x86"], d["verify_arm"])
+    panel_dist(fig.add_subplot(gs[1, 3:5]), d["runs"])
 
     prov = []
     for k, lab in [("prove", "prove"), ("verify_x86", "verify/x86"),
